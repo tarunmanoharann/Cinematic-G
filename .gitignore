@@ -1,0 +1,32 @@
+# Environment files
+.env
+.env.local
+
+# Node modules
+node_modules/
+
+# Build folders
+dist/
+build/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Java
+*.class
+target/
+
+# Package lock (optional)
+package-lock.json
