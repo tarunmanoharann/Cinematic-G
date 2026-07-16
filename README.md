@@ -1,235 +1,222 @@
 # CineGraph - Movie Recommendation System
 
-Production-quality movie discovery and recommendation web app using the TMDb API and Knowledge Graphs.
+Production-quality movie discovery and analytics web app using the TMDb API, Knowledge Graphs, and Streamlit.
 
 ## Features
 
-- **Heterogeneous Knowledge Graph**: Built with NetworkX using movies, actors, directors, and genres.
-- **Hybrid Recommendation Engine**: Combines TF-IDF content similarity with knowledge graph multi-hop traversal.
-- **MongoDB Backend**: Stores user profiles and interactions in MongoDB.
+- **ETL Pipeline**: Automated data fetching from TMDb API with enrichment and processing
+- **Knowledge Graph**: Built with NetworkX using movies, actors, directors, and genres
+- **MongoDB Storage**: Persistent storage of all movie data and relationships
+- **Content-Based Recommendations**: TF-IDF similarity scoring for movie recommendations
+- **Streamlit Dashboard**: Interactive analytics and filtering interface
+  - Real-time charts and visualizations
+  - Genre, rating, and year filters
+  - Movie search functionality
+  - Top-rated movies analysis
 
 ## Prerequisites
 
 Install these before running the project:
 
-- **Python 3.11 or 3.12** from <https://www.python.org/downloads/>
-- **Node.js 20+** from <https://nodejs.org/>
-- **MongoDB Community Server** from <https://www.mongodb.com/try/download/community>
-- **TMDb API key** from <https://www.themoviedb.org/>
+- **Python 3.11 or 3.12** from https://www.python.org/downloads/
+- **MongoDB Community Server** from https://www.mongodb.com/try/download/community
+- **TMDb API key** from https://www.themoviedb.org/
 
-During Python installation on Windows, tick **Add python.exe to PATH**.
+## Setup
 
-## Backend Setup With Virtual Environment
-
-Run these commands from the project root folder.
-
-### 1. Create the Virtual Environment
-
-```powershell
-cd backend
-py -3.11 -m venv .venv
-```
-
-If `py -3.11` does not work, try:
-
-```powershell
-python -m venv .venv
-```
-
-### 2. Activate the Virtual Environment
-
-PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Command Prompt:
-
-```cmd
-.\.venv\Scripts\activate.bat
-```
-
-Git Bash:
+### 1. Clone and Create Virtual Environment
 
 ```bash
-source .venv/Scripts/activate
+cd Cinematic-G
+python -m venv venv
 ```
 
-After activation, your terminal should show `(.venv)` at the start of the prompt.
-
-If PowerShell blocks activation, run this once:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+**Activate on Windows:**
+```bash
+.\venv\Scripts\activate
 ```
 
-Then activate again:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
+**Activate on macOS/Linux:**
+```bash
+source venv/bin/activate
 ```
 
-### 3. Install Backend Dependencies
+### 2. Install Dependencies
 
-Make sure the virtual environment is active first.
-
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-### 4. Configure Environment Variables
+### 3. Configure Environment Variables
 
-Open `backend/.env` and set:
+Copy `.env.example` to `.env` and fill in your values:
 
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
 ```env
 TMDB_API_KEY=your_tmdb_api_key_here
-SECRET_KEY=use_a_long_random_secret_here
 MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=movies
 ```
 
-Make sure MongoDB is running before starting the backend.
+### 4. Ensure MongoDB is Running
 
-### 5. Run the Data Pipeline
+**On Windows:**
+```bash
+mongod
+```
 
-From the project root folder, with the backend virtual environment active:
+**On macOS (with Homebrew):**
+```bash
+brew services start mongodb-community
+```
 
-```powershell
-cd ..
+**On Linux:**
+```bash
+sudo systemctl start mongod
+```
+
+### 5. Run ETL Pipeline
+
+Fetch and process movie data (initial run takes 10-30 minutes):
+
+```bash
 python -m backend.etl.pipeline
 ```
 
-The first run can take 30-60 minutes because it fetches movie data, builds the knowledge graph, and trains the TF-IDF model.
+This will:
+- Fetch popular movies from TMDb API
+- Enrich with detailed information (cast, crew, genres)
+- Build knowledge graph relationships
+- Store everything in MongoDB
+- Train TF-IDF similarity model
 
-### 6. Start the Backend Server
+### 6. Start Streamlit Dashboard
 
-From the project root folder, with the backend virtual environment active:
-
-```powershell
-python -m uvicorn backend.main:app --reload --port 8000
+```bash
+streamlit run streamlit_app.py
 ```
 
-Backend URL:
+The app will open at `http://localhost:8501`
 
-```text
-http://localhost:8000
+## Project Structure
+
+```
+Cinematic-G/
+├── backend/
+│   ├── __init__.py
+│   ├── config.py              # Configuration settings
+│   ├── models.py              # Pydantic data models
+│   ├── db/
+│   │   ├── __init__.py
+│   │   └── mongo.py           # MongoDB operations
+│   └── etl/
+│       ├── __init__.py
+│       ├── tmdb_fetcher.py    # TMDb API client
+│       ├── processor.py       # Data processing & TF-IDF
+│       ├── graph_builder.py   # Knowledge graph construction
+│       └── pipeline.py        # ETL orchestration
+├── streamlit_app.py           # Main Streamlit dashboard
+├── requirements.txt           # Python dependencies
+├── .env.example              # Environment template
+└── README.md
 ```
 
-## Visual Studio / VS Code Setup
+## Dashboard Features
 
-If your friend is getting dependency errors, they are probably using the wrong Python interpreter.
+### Overview Tab
+- Total movies count
+- Average ratings
+- Popularity metrics
+- Year range coverage
 
-### VS Code
+### Analysis Tab
+- Rating distribution histogram
+- Popularity trends by year
+- Genre distribution (bar chart and pie chart)
 
-1. Open the project folder in VS Code.
-2. Press `Ctrl + Shift + P`.
-3. Search for `Python: Select Interpreter`.
-4. Choose:
+### Top Movies Tab
+- Customizable top N movies
+- Sort by rating, popularity, or vote count
 
-```text
-backend\.venv\Scripts\python.exe
-```
+### Filter Tab
+- Multi-select genre filtering
+- Rating range slider
+- Year range slider
+- Real-time results
 
-5. Open a new terminal and confirm:
+### Search Tab
+- Full-text movie title search
+- Quick results with overviews
 
-```powershell
-python -c "import sys; print(sys.executable)"
-```
+## Technology Stack
 
-It should print a path inside `backend\.venv`.
+- **Backend**: Python, FastAPI
+- **Data Processing**: Pandas, NumPy, Scikit-learn
+- **Knowledge Graph**: NetworkX
+- **Database**: MongoDB with Motor async driver
+- **Frontend**: Streamlit with Plotly visualizations
+- **API**: The Movie Database (TMDb) v3
 
-### Visual Studio
+## API Configuration
 
-1. Open the project in Visual Studio.
-2. Go to **View > Other Windows > Python Environments**.
-3. Add or select the virtual environment at:
+Get your free TMDb API key:
+1. Visit https://www.themoviedb.org/settings/api
+2. Sign up for an account
+3. Request an API key
+4. Copy the API key to your `.env` file
 
-```text
-backend\.venv
-```
+## Common Issues
 
-4. Make sure packages are installed using that environment, not global Python.
+### "ModuleNotFoundError: No module named 'backend'"
+Make sure you're running commands from the project root directory:
+```bash
+# Correct
+python -m backend.etl.pipeline
 
-## Frontend Setup
-
-Open a second terminal from the project root:
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend URL:
-
-```text
-http://localhost:5173
-```
-
-## Common Dependency Fixes
-
-### `python` or `py` is not recognized
-
-Install Python again and tick **Add python.exe to PATH**. Then close and reopen Visual Studio, VS Code, and the terminal.
-
-### Packages install but imports still fail
-
-You are probably not inside the virtual environment. Run:
-
-```powershell
+# Wrong
 cd backend
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m etl.pipeline
 ```
 
-Then select `backend\.venv\Scripts\python.exe` as the interpreter.
-
-### `pip` installs to the wrong Python
-
-Use this instead of plain `pip`:
-
-```powershell
-python -m pip install -r requirements.txt
+### "MongoDB connection error"
+Ensure MongoDB is running:
+```bash
+# Check if running
+mongo --eval "db.adminCommand('ping')"
 ```
 
-### `uvicorn` is not recognized
+### "requests.exceptions.ConnectionError: No connection"
+Check your internet connection and TMDb API key in `.env`
 
-Run uvicorn through Python:
+## Performance Notes
 
-```powershell
-python -m uvicorn backend.main:app --reload --port 8000
-```
+- First ETL run: 10-30 minutes (depending on pages fetched)
+- Subsequent runs: 5-10 minutes
+- Streamlit dashboard: Instant load after data is cached
+- MongoDB indexes ensure fast filtering and search
 
-### `ModuleNotFoundError: No module named backend`
+## Future Enhancements
 
-Run backend commands from the project root folder, not from inside `backend`.
+- [ ] Collaborative filtering recommendations
+- [ ] User preference profiles
+- [ ] Advanced graph traversal algorithms
+- [ ] Real-time data updates
+- [ ] API endpoint for recommendations
+- [ ] Movie watchlist functionality
 
-Correct:
+## License
 
-```powershell
-cd C:\path\to\4628
-python -m uvicorn backend.main:app --reload --port 8000
-```
+College Project - 2024
 
-Incorrect:
+## Support
 
-```powershell
-cd backend
-python -m uvicorn backend.main:app --reload --port 8000
-```
-
-### MongoDB connection error
-
-Start MongoDB locally and check that `.env` contains:
-
-```env
-MONGODB_URL=mongodb://localhost:27017
-```
-
-## Tech Stack
-
-- **Frontend**: React, TailwindCSS, Zustand, React Router, Axios.
-- **Backend**: FastAPI, MongoDB, NetworkX, Scikit-learn, Pandas.
-- **Data**: TMDb API.
+For issues or questions:
+1. Check the README troubleshooting section
+2. Verify MongoDB is running
+3. Confirm `.env` variables are set correctly
+4. Check internet connection for API calls
