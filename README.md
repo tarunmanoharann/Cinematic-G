@@ -1,4 +1,4 @@
-# CineGraph - Movie Recommendation System
+# Cinematic-G - Movie Recommendation System
 
 Production-quality movie discovery and analytics web app using the OMDB API, Knowledge Graphs, and Streamlit.
 

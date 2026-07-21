@@ -20,13 +20,68 @@ class ETLPipeline:
         self.graph = KnowledgeGraphBuilder()
         
         # Common movie search queries to get initial movie list (OMDB doesn't have a "popular movies" endpoint)
-        self.search_queries = [
+        # Deduplicated list
+        self.search_queries = list(dict.fromkeys([
             "Batman", "Superman", "Star Wars", "Harry Potter", "Marvel",
             "Inception", "The Matrix", "Interstellar", "Avatar", "Titanic",
             "Jurassic Park", "The Godfather", "Forrest Gump", "Fight Club",
             "Pulp Fiction", "The Shawshank Redemption", "The Dark Knight",
-            "Inception", "Gladiator", "Saving Private Ryan"
-        ]
+            "Gladiator", "Saving Private Ryan", "Avengers", "Mission Impossible",
+            "Star Trek", "James Bond", "Back to the Future", "The Lord of the Rings",
+            "Toy Story", "The Lion King", "Frozen", "Spider-Man",
+            "Iron Man", "Captain America", "Thor",
+            "Black Panther", "Wonder Woman", "Aquaman",
+            "The Hunger Games", "Twilight", "Dune",
+            "Blade Runner", "Alien", "Terminator",
+            "Die Hard", "Lethal Weapon", "Mad Max",
+            "Rocky", "Rambo", "John Wick", "Taken",
+            "La La Land", "The Notebook",
+            "A Beautiful Mind", "The Social Network",
+            "Slumdog Millionaire", "12 Years a Slave",
+            "The Pianist", "Schindler's List", "Casablanca",
+            "Citizen Kane", "Gone with the Wind",
+            "The Wizard of Oz", "Singin' in the Rain",
+            "Psycho", "The Silence of the Lambs",
+            "Goodfellas", "The Departed",
+            "Good Will Hunting", "Dead Poets Society",
+            "The Breakfast Club", "Ferris Bueller's Day Off",
+            "Ghostbusters", "Grease", "Dirty Dancing",
+            "Footloose", "Flashdance",
+            "Saturday Night Fever",
+            "The Godfather Part II", "The Dark Knight Rises",
+            "Dunkirk", "Tenet",
+            "Oppenheimer", "Barbie",
+            "Dune: Part Two",
+            "The Batman", "Joker",
+            "Parasite", "Moonlight", "Get Out",
+            "Us", "Nope",
+            "The Shape of Water", "Pan's Labyrinth",
+            "The Devil's Backbone",
+            "Crouching Tiger, Hidden Dragon",
+            "Life is Beautiful", "Amélie",
+            "The Intouchables", "The Artist", "La Haine",
+            "City of God", "City of Men",
+            "Central Station",
+            "The Motorcycle Diaries",
+            "Y Tu Mamá También",
+            "Amores Perros",
+            "Babel",
+            "21 Grams",
+            "Biutiful",
+            "The Revenant",
+            "Birdman",
+            "The Grand Budapest Hotel",
+            "Moonrise Kingdom",
+            "The Royal Tenenbaums",
+            "Fantastic Mr. Fox",
+            "Isle of Dogs",
+            "The Life Aquatic with Steve Zissou",
+            "Rushmore",
+            "Bottle Rocket",
+            "The Darjeeling Limited",
+            "Asteroid City",
+            "The French Dispatch"
+        ]))
 
     async def fetch_and_process_movies(self, pages_per_query: int = 1) -> List[Dict]:
         """Fetch movies from OMDB using search queries and process them."""
@@ -235,13 +290,24 @@ class ETLPipeline:
 
 async def main():
     """Run ETL pipeline."""
+    import argparse
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+    parser = argparse.ArgumentParser(description="Run movie ETL pipeline")
+    parser.add_argument(
+        "--pages",
+        type=int,
+        default=1,
+        help="Number of search result pages to fetch per query (default: 1)"
+    )
+    args = parser.parse_args()
+
     pipeline = ETLPipeline()
-    await pipeline.run(num_pages_per_query=1)
+    await pipeline.run(num_pages_per_query=args.pages)
 
 
 if __name__ == "__main__":

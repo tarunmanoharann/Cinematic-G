@@ -1,4 +1,6 @@
-"""Streamlit dashboard for CineGraph movie recommendation system."""
+"""Streamlit dashboard for Cinematic-G movie recommendation system."""
+import math
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -11,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Page config
 st.set_page_config(
-    page_title="CineGraph - Movie Analytics",
-    page_icon="🎬",
+    page_title="Cinematic-G - Movie Analytics",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -100,6 +101,14 @@ def load_movies_data():
         else:
             df["genre_list"] = [[] for _ in range(len(df))]
 
+        # Pre-compute numeric helper columns used for sorting/filtering
+        df["metascore_num"] = df["metascore"].apply(
+            lambda x: float(x) if pd.notna(x) and x != "N/A" else 0.0
+        )
+        df["imdb_votes_num"] = df["imdb_votes"].apply(
+            lambda x: int(str(x).replace(",", "")) if pd.notna(x) and x != "N/A" and str(x).strip() != "" else 0
+        )
+
         return df
     except Exception as e:
         st.error(f"Error loading movies: {e}")
@@ -110,13 +119,12 @@ def display_header():
     """Display app header."""
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.title("🎬 CineGraph")
-        st.subheader("Movie Analytics & Recommendation Engine")
+        st.title("Cinematic-G")
     with col2:
         st.metric("Version", "1.0")
 
 
-def display_overview(df: pd.DataFrame):
+def display_overview_metrics(df: pd.DataFrame):
     """Display key metrics."""
     st.header("📊 Overview")
 
@@ -128,7 +136,7 @@ def display_overview(df: pd.DataFrame):
         avg_rating = df["imdb_rating"].mean()
         st.metric("Avg Rating", f"{avg_rating:.1f}/10")
     with col3:
-        avg_metascore = df["metascore"].apply(lambda x: float(x) if pd.notna(x) and x != "N/A" else 0).mean()
+        avg_metascore = df["metascore_num"].mean()
         st.metric("Avg Metascore", f"{avg_metascore:.0f}")
     with col4:
         if "year" in df.columns and df["year"].notna().any():
@@ -138,6 +146,31 @@ def display_overview(df: pd.DataFrame):
         st.metric("Year Range", year_range)
 
 
+def display_quick_search(df: pd.DataFrame):
+    """Quick search box shown right on the Overview tab."""
+    st.subheader("🔎 Quick Search")
+
+    search_query = st.text_input("Enter movie title or keywords", key="overview_search")
+
+    if search_query:
+        search_results = df[
+            df["title"].str.contains(search_query, case=False, na=False)
+        ]
+
+        if not search_results.empty:
+            st.caption(f"Found {len(search_results)} movie(s) — showing top 10")
+            for _, movie in search_results.head(10).iterrows():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**{movie['title']}**")
+                    plot_text = str(movie["plot"]) if pd.notna(movie["plot"]) else ""
+                    st.write(plot_text[:200] + ("..." if len(plot_text) > 200 else ""))
+                with col2:
+                    st.metric("Rating", f"{movie['imdb_rating']:.1f}/10")
+        else:
+            st.info("No movies found matching your search")
+
+
 def display_rating_distribution(df: pd.DataFrame):
     """Display rating distribution chart."""
     st.subheader("Rating Distribution")
@@ -145,6 +178,7 @@ def display_rating_distribution(df: pd.DataFrame):
     # Create bins for ratings
     bins = [0, 2, 4, 6, 8, 10]
     labels = ["0-2", "2-4", "4-6", "6-8", "8-10"]
+    df = df.copy()
     df["rating_bin"] = pd.cut(df["imdb_rating"], bins=bins, labels=labels, right=False)
     rating_counts = df["rating_bin"].value_counts().sort_index()
 
@@ -181,29 +215,6 @@ def display_popularity_trends(df: pd.DataFrame):
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No year data available")
-
-
-def display_top_movies(df: pd.DataFrame):
-    """Display top-rated movies."""
-    st.subheader("🏆 Top-Rated Movies")
-
-    n_movies = st.slider("Number of movies to display", 5, 20, 10)
-    sort_by = st.selectbox("Sort by", ["imdb_rating", "metascore", "imdb_votes"])
-
-    # Process numeric columns for sorting
-    df_sorted = df.copy()
-    df_sorted["metascore_num"] = df_sorted["metascore"].apply(lambda x: float(x) if pd.notna(x) and x != "N/A" else 0)
-    df_sorted["imdb_votes_num"] = df_sorted["imdb_votes"].apply(lambda x: int(x.replace(",", "")) if pd.notna(x) and x != "N/A" else 0)
-
-    sort_col = sort_by
-    if sort_by == "metascore":
-        sort_col = "metascore_num"
-    elif sort_by == "imdb_votes":
-        sort_col = "imdb_votes_num"
-
-    top_movies = df_sorted.nlargest(n_movies, sort_col)[["title", "imdb_rating", "metascore", "year"]]
-
-    st.dataframe(top_movies, use_container_width=True)
 
 
 def display_genre_analysis(df: pd.DataFrame):
@@ -243,92 +254,161 @@ def display_genre_analysis(df: pd.DataFrame):
         st.plotly_chart(fig, use_container_width=True)
 
 
-def display_filters(df: pd.DataFrame):
-    """Display filter options and filtered results."""
-    st.header("🔍 Filter & Search")
+def display_overview_tab(df: pd.DataFrame):
+    """Overview tab: metrics + quick search + full analysis."""
+    display_overview_metrics(df)
+    st.divider()
+    display_quick_search(df)
+    st.divider()
 
-    col1, col2, col3 = st.columns(3)
-
+    st.header("📈 Analysis")
+    col1, col2 = st.columns(2)
     with col1:
-        # Genre filter
-        all_genres = []
-        for genres in df["genre_list"]:
-            all_genres.extend(genres)
-        unique_genres = sorted(list(set(all_genres)))
-
-        selected_genres = st.multiselect("Select Genres", unique_genres)
-
+        display_rating_distribution(df)
     with col2:
-        # Rating filter
-        min_rating, max_rating = st.slider(
-            "Rating Range", 0.0, 10.0, (0.0, 10.0), step=0.5
-        )
+        display_popularity_trends(df)
 
-    with col3:
-        # Year filter
-        if "year" in df.columns and df["year"].notna().any():
-            min_year = int(df["year"].min())
-            max_year = int(df["year"].max())
-            selected_years = st.slider(
-                "Year Range", min_year, max_year, (min_year, max_year)
+    display_genre_analysis(df)
+
+
+def display_movies_tab(df: pd.DataFrame):
+    """Movies tab: all movies with search, filters, sorting, and pagination."""
+    st.header("🎞️ All Movies")
+
+    # ---- Search ----
+    search_query = st.text_input("Search by title or keywords", key="movies_search")
+
+    # ---- Filters ----
+    with st.expander("🔍 Filters", expanded=True):
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            all_genres = []
+            for genres in df["genre_list"]:
+                all_genres.extend(genres)
+            unique_genres = sorted(set(all_genres))
+            selected_genres = st.multiselect("Genres", unique_genres, key="movies_genre_filter")
+
+        with col2:
+            min_rating, max_rating = st.slider(
+                "Rating Range", 0.0, 10.0, (0.0, 10.0), step=0.5, key="movies_rating_filter"
             )
-        else:
-            selected_years = (None, None)
 
-    # Apply filters
+        with col3:
+            if "year" in df.columns and df["year"].notna().any():
+                min_year_bound = int(df["year"].min())
+                max_year_bound = int(df["year"].max())
+                selected_years = st.slider(
+                    "Year Range",
+                    min_year_bound,
+                    max_year_bound,
+                    (min_year_bound, max_year_bound),
+                    key="movies_year_filter",
+                )
+            else:
+                selected_years = (None, None)
+
+    # ---- Sorting ----
+    col_sort1, col_sort2 = st.columns([2, 1])
+    with col_sort1:
+        sort_by = st.selectbox(
+            "Sort by",
+            ["imdb_rating", "metascore", "imdb_votes", "title", "year"],
+            key="movies_sort_by",
+        )
+    with col_sort2:
+        sort_order = st.radio("Order", ["Descending", "Ascending"], horizontal=True, key="movies_sort_order")
+
+    sort_col_map = {
+        "imdb_rating": "imdb_rating",
+        "metascore": "metascore_num",
+        "imdb_votes": "imdb_votes_num",
+        "title": "title",
+        "year": "year",
+    }
+    sort_col = sort_col_map[sort_by]
+    ascending = sort_order == "Ascending"
+
+    # ---- Apply filters ----
     filtered_df = df.copy()
+
+    if search_query:
+        filtered_df = filtered_df[
+            filtered_df["title"].str.contains(search_query, case=False, na=False)
+        ]
 
     if selected_genres:
         filtered_df = filtered_df[
-            filtered_df["genre_list"].apply(
-                lambda x: any(g in selected_genres for g in x)
-            )
+            filtered_df["genre_list"].apply(lambda x: any(g in selected_genres for g in x))
         ]
 
     filtered_df = filtered_df[
-        (filtered_df["imdb_rating"] >= min_rating)
-        & (filtered_df["imdb_rating"] <= max_rating)
+        (filtered_df["imdb_rating"] >= min_rating) & (filtered_df["imdb_rating"] <= max_rating)
     ]
 
-    if selected_years[0] and "year" in filtered_df.columns:
+    if selected_years[0] is not None and "year" in filtered_df.columns:
         filtered_df = filtered_df[
-            (filtered_df["year"] >= selected_years[0])
-            & (filtered_df["year"] <= selected_years[1])
+            filtered_df["year"].isna()
+            | ((filtered_df["year"] >= selected_years[0]) & (filtered_df["year"] <= selected_years[1]))
         ]
 
-    st.subheader(f"Found {len(filtered_df)} movies")
+    # ---- Apply sorting ----
+    filtered_df = filtered_df.sort_values(by=sort_col, ascending=ascending, na_position="last")
 
-    # Display filtered results
-    if not filtered_df.empty:
-        display_cols = ["title", "imdb_rating", "metascore", "year"]
-        display_cols = [col for col in display_cols if col in filtered_df.columns]
-        st.dataframe(filtered_df[display_cols], use_container_width=True)
-    else:
-        st.info("No movies match your filters")
+    total_results = len(filtered_df)
+    st.subheader(f"Found {total_results} movie(s)")
 
+    if total_results == 0:
+        st.info("No movies match your search/filters")
+        return
 
-def display_search(df: pd.DataFrame):
-    """Display search functionality."""
-    st.header("🔎 Search Movies")
+    # ---- Pagination ----
+    col_p1, col_p2 = st.columns([1, 3])
+    with col_p1:
+        page_size = st.selectbox("Movies per page", [10, 20, 50, 100], index=1, key="movies_page_size")
 
-    search_query = st.text_input("Enter movie title or keywords")
+    total_pages = max(1, math.ceil(total_results / page_size))
 
-    if search_query:
-        search_results = df[
-            df["title"].str.contains(search_query, case=False, na=False)
-        ]
+    # Reset to page 1 if filters changed and current page is out of range
+    if "movies_current_page" not in st.session_state:
+        st.session_state["movies_current_page"] = 1
+    if st.session_state["movies_current_page"] > total_pages:
+        st.session_state["movies_current_page"] = 1
 
-        if not search_results.empty:
-            st.subheader(f"Found {len(search_results)} movie(s)")
-            for _, movie in search_results.head(10).iterrows():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{movie['title']}**")
-                    st.write(movie["plot"][:200] + "...")
-                with col2:
-                    st.metric("Rating", f"{movie['imdb_rating']:.1f}/10")
-        else:
-            st.info("No movies found matching your search")
+    with col_p2:
+        current_page = st.number_input(
+            f"Page (1 - {total_pages})",
+            min_value=1,
+            max_value=total_pages,
+            value=st.session_state["movies_current_page"],
+            step=1,
+            key="movies_current_page",
+        )
+
+    start_idx = (current_page - 1) * page_size
+    end_idx = start_idx + page_size
+    page_df = filtered_df.iloc[start_idx:end_idx]
+
+    display_cols = ["title", "imdb_rating", "metascore", "imdb_votes", "year"]
+    display_cols = [c for c in display_cols if c in page_df.columns]
+    st.dataframe(page_df[display_cols], use_container_width=True, hide_index=True)
+
+    # ---- Pagination controls ----
+    nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
+    with nav_col1:
+        if st.button("⬅️ Previous", disabled=current_page <= 1):
+            st.session_state["movies_current_page"] = current_page - 1
+            st.rerun()
+    with nav_col2:
+        st.markdown(
+            f"<div style='text-align:center;'>Page {current_page} of {total_pages} "
+            f"&nbsp;|&nbsp; Showing {start_idx + 1}-{min(end_idx, total_results)} of {total_results}</div>",
+            unsafe_allow_html=True,
+        )
+    with nav_col3:
+        if st.button("Next ➡️", disabled=current_page >= total_pages):
+            st.session_state["movies_current_page"] = current_page + 1
+            st.rerun()
 
 
 def main():
@@ -347,36 +427,15 @@ def main():
         return
 
     # Display tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["Overview", "Analysis", "Top Movies", "Filter", "Search"]
-    )
+    tab1, tab2 = st.tabs(["Overview", "Movies"])
 
     with tab1:
-        display_overview(df)
+        display_overview_tab(df)
 
     with tab2:
-        col1, col2 = st.columns(2)
-        with col1:
-            display_rating_distribution(df)
-        with col2:
-            display_popularity_trends(df)
+        display_movies_tab(df)
 
-        display_genre_analysis(df)
 
-    with tab3:
-        display_top_movies(df)
-
-    with tab4:
-        display_filters(df)
-
-    with tab5:
-        display_search(df)
-
-    # Footer
-    st.divider()
-    st.markdown(
-        "Built with ❤️ using Streamlit, Plotly, and MongoDB | CineGraph 2024"
-    )
 
 
 if __name__ == "__main__":

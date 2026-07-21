@@ -1,4 +1,4 @@
-"""Configuration settings for CineGraph backend."""
+"""Configuration settings for Cinematic-G backend."""
 import os
 from pydantic_settings import BaseSettings
 

@@ -1,1 +1,1 @@
-"""Backend module for CineGraph movie recommendation system."""
+"""Backend module for Cinematic-G movie recommendation system."""
