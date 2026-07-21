@@ -64,12 +64,33 @@ def load_movies_data():
 
         df = pd.DataFrame(movies)
 
-        # Process data
-        if "release_date" in df.columns:
-            df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce")
-            df["year"] = df["release_date"].dt.year
-        else:
-            df["year"] = None
+        # Ensure required columns exist and process data
+        required_columns = ["title", "imdb_rating", "metascore", "imdb_votes", "year", "plot"]
+        for col in required_columns:
+            if col not in df.columns:
+                if col == "imdb_rating":
+                    df[col] = 0.0
+                elif col == "year":
+                    df[col] = None
+                else:
+                    df[col] = "N/A"
+            else:
+                if col == "imdb_rating":
+                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+                elif col == "year":
+                    # Don't fillna here - the year column is parsed/normalized
+                    # into an int-or-None a few lines below. Calling
+                    # fillna(None) is invalid in modern pandas and raises
+                    # "Must specify a fill 'value' or 'method'."
+                    pass
+                else:
+                    df[col] = df[col].fillna("N/A")
+
+        # Process year field (since it's stored as string like "2000" or "2000–2001")
+        if "year" in df.columns:
+            df["year"] = df["year"].apply(
+                lambda x: int(x[:4]) if pd.notna(x) and str(x).strip() != "" and str(x).strip() != "N/A" else None
+            )
 
         # Extract genres
         if "genres" in df.columns:
@@ -90,7 +111,7 @@ def display_header():
     col1, col2 = st.columns([3, 1])
     with col1:
         st.title("🎬 CineGraph")
-        st.subtitle("Movie Analytics & Recommendation Engine")
+        st.subheader("Movie Analytics & Recommendation Engine")
     with col2:
         st.metric("Version", "1.0")
 
@@ -104,11 +125,11 @@ def display_overview(df: pd.DataFrame):
     with col1:
         st.metric("Total Movies", len(df))
     with col2:
-        avg_rating = df["vote_average"].mean()
+        avg_rating = df["imdb_rating"].mean()
         st.metric("Avg Rating", f"{avg_rating:.1f}/10")
     with col3:
-        avg_popularity = df["popularity"].mean()
-        st.metric("Avg Popularity", f"{avg_popularity:.0f}")
+        avg_metascore = df["metascore"].apply(lambda x: float(x) if pd.notna(x) and x != "N/A" else 0).mean()
+        st.metric("Avg Metascore", f"{avg_metascore:.0f}")
     with col4:
         if "year" in df.columns and df["year"].notna().any():
             year_range = f"{int(df['year'].min())} - {int(df['year'].max())}"
@@ -124,7 +145,7 @@ def display_rating_distribution(df: pd.DataFrame):
     # Create bins for ratings
     bins = [0, 2, 4, 6, 8, 10]
     labels = ["0-2", "2-4", "4-6", "6-8", "8-10"]
-    df["rating_bin"] = pd.cut(df["vote_average"], bins=bins, labels=labels, right=False)
+    df["rating_bin"] = pd.cut(df["imdb_rating"], bins=bins, labels=labels, right=False)
     rating_counts = df["rating_bin"].value_counts().sort_index()
 
     fig = px.bar(
@@ -139,12 +160,12 @@ def display_rating_distribution(df: pd.DataFrame):
 
 def display_popularity_trends(df: pd.DataFrame):
     """Display popularity trends over years."""
-    st.subheader("Popularity Trends by Year")
+    st.subheader("Rating Trends by Year")
 
     if "year" in df.columns and df["year"].notna().any():
         yearly_data = (
             df[df["year"].notna()]
-            .groupby("year")["popularity"]
+            .groupby("year")["imdb_rating"]
             .agg(["mean", "count"])
             .reset_index()
         )
@@ -154,8 +175,8 @@ def display_popularity_trends(df: pd.DataFrame):
             x="year",
             y="mean",
             markers=True,
-            labels={"mean": "Avg Popularity", "year": "Year"},
-            title="Average Popularity by Release Year",
+            labels={"mean": "Avg Rating", "year": "Year"},
+            title="Average Rating by Release Year",
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -167,9 +188,20 @@ def display_top_movies(df: pd.DataFrame):
     st.subheader("🏆 Top-Rated Movies")
 
     n_movies = st.slider("Number of movies to display", 5, 20, 10)
-    sort_by = st.selectbox("Sort by", ["vote_average", "popularity", "vote_count"])
+    sort_by = st.selectbox("Sort by", ["imdb_rating", "metascore", "imdb_votes"])
 
-    top_movies = df.nlargest(n_movies, sort_by)[["title", "vote_average", "popularity", "year"]]
+    # Process numeric columns for sorting
+    df_sorted = df.copy()
+    df_sorted["metascore_num"] = df_sorted["metascore"].apply(lambda x: float(x) if pd.notna(x) and x != "N/A" else 0)
+    df_sorted["imdb_votes_num"] = df_sorted["imdb_votes"].apply(lambda x: int(x.replace(",", "")) if pd.notna(x) and x != "N/A" else 0)
+
+    sort_col = sort_by
+    if sort_by == "metascore":
+        sort_col = "metascore_num"
+    elif sort_by == "imdb_votes":
+        sort_col = "imdb_votes_num"
+
+    top_movies = df_sorted.nlargest(n_movies, sort_col)[["title", "imdb_rating", "metascore", "year"]]
 
     st.dataframe(top_movies, use_container_width=True)
 
@@ -254,8 +286,8 @@ def display_filters(df: pd.DataFrame):
         ]
 
     filtered_df = filtered_df[
-        (filtered_df["vote_average"] >= min_rating)
-        & (filtered_df["vote_average"] <= max_rating)
+        (filtered_df["imdb_rating"] >= min_rating)
+        & (filtered_df["imdb_rating"] <= max_rating)
     ]
 
     if selected_years[0] and "year" in filtered_df.columns:
@@ -268,7 +300,7 @@ def display_filters(df: pd.DataFrame):
 
     # Display filtered results
     if not filtered_df.empty:
-        display_cols = ["title", "vote_average", "popularity", "year"]
+        display_cols = ["title", "imdb_rating", "metascore", "year"]
         display_cols = [col for col in display_cols if col in filtered_df.columns]
         st.dataframe(filtered_df[display_cols], use_container_width=True)
     else:
@@ -292,9 +324,9 @@ def display_search(df: pd.DataFrame):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"**{movie['title']}**")
-                    st.write(movie["overview"][:200] + "...")
+                    st.write(movie["plot"][:200] + "...")
                 with col2:
-                    st.metric("Rating", f"{movie['vote_average']:.1f}/10")
+                    st.metric("Rating", f"{movie['imdb_rating']:.1f}/10")
         else:
             st.info("No movies found matching your search")
 

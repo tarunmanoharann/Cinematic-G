@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API Keys
-    tmdb_api_key: str
+    omdb_api_key: str
     secret_key: str = "your-secret-key-change-in-production"
 
     # MongoDB

@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from typing import List, Dict
-from backend.etl.tmdb_fetcher import TMDbFetcher
+from backend.etl.omdb_fetcher import OmdbFetcher
 from backend.etl.processor import MovieProcessor
 from backend.etl.graph_builder import KnowledgeGraphBuilder
 from backend.db.mongo import db_manager
@@ -15,21 +15,44 @@ class ETLPipeline:
     """Main ETL pipeline for movie data."""
 
     def __init__(self):
-        self.fetcher = TMDbFetcher()
+        self.fetcher = OmdbFetcher()
         self.processor = MovieProcessor()
         self.graph = KnowledgeGraphBuilder()
+        
+        # Common movie search queries to get initial movie list (OMDB doesn't have a "popular movies" endpoint)
+        self.search_queries = [
+            "Batman", "Superman", "Star Wars", "Harry Potter", "Marvel",
+            "Inception", "The Matrix", "Interstellar", "Avatar", "Titanic",
+            "Jurassic Park", "The Godfather", "Forrest Gump", "Fight Club",
+            "Pulp Fiction", "The Shawshank Redemption", "The Dark Knight",
+            "Inception", "Gladiator", "Saving Private Ryan"
+        ]
 
-    async def fetch_and_process_movies(self, pages: int = 5) -> List[Dict]:
-        """Fetch movies from TMDb and process them."""
+    async def fetch_and_process_movies(self, pages_per_query: int = 1) -> List[Dict]:
+        """Fetch movies from OMDB using search queries and process them."""
         all_movies = []
+        seen_imdb_ids = set()
 
-        logger.info(f"Fetching movies from {pages} pages...")
-        for page in range(1, pages + 1):
-            movies = self.fetcher.get_popular_movies(page=page)
-            logger.info(f"Fetched {len(movies)} movies from page {page}")
-            all_movies.extend(movies)
+        logger.info(f"Fetching movies from {len(self.search_queries)} search queries...")
+        for query in self.search_queries:
+            for page in range(1, pages_per_query + 1):
+                search_results = self.fetcher.search_movies(query, page=page)
+                logger.info(f"Fetched {len(search_results)} movies for query '{query}' (page {page})")
+                
+                for movie in search_results:
+                    imdb_id = movie.get("imdbID")
+                    if imdb_id and imdb_id not in seen_imdb_ids:
+                        seen_imdb_ids.add(imdb_id)
+                        all_movies.append(movie)
+                
+                await asyncio.sleep(0.25)  # Rate limiting
+                
+                if len(all_movies) >= settings.max_movies_fetch:
+                    break
+            if len(all_movies) >= settings.max_movies_fetch:
+                break
 
-        logger.info(f"Total movies fetched: {len(all_movies)}")
+        logger.info(f"Total unique movies fetched: {len(all_movies)}")
         return all_movies
 
     async def enrich_movie_data(self, movies: List[Dict]) -> List[Dict]:
@@ -38,20 +61,43 @@ class ETLPipeline:
 
         for i, movie in enumerate(movies):
             try:
-                movie_id = movie["id"]
-                details = self.fetcher.get_movie_details(movie_id)
+                imdb_id = movie["imdbID"]
+                details = self.fetcher.get_movie_details(imdb_id)
 
-                # Merge basic and detailed info
-                enriched = {**movie, **details}
-                enriched["tmdb_id"] = movie_id
-                enriched_movies.append(enriched)
+                if details.get("Response") == "True":
+                    enriched = {**movie, **details}
+                    enriched["imdb_id"] = imdb_id
+                    
+                    # Process genres into list
+                    genre_str = details.get("Genre", "")
+                    enriched["genres"] = [{"name": g.strip()} for g in genre_str.split(",") if g.strip()]
+                    
+                    # Process actors into list
+                    actors_str = details.get("Actors", "")
+                    enriched["actors"] = [{"name": a.strip()} for a in actors_str.split(",") if a.strip()]
+                    
+                    # Process directors into list
+                    director_str = details.get("Director", "")
+                    enriched["directors"] = [{"name": d.strip()} for d in director_str.split(",") if d.strip()]
+                    
+                    # Convert imdbRating to float
+                    try:
+                        enriched["imdb_rating"] = float(details.get("imdbRating", "0"))
+                    except (ValueError, TypeError):
+                        enriched["imdb_rating"] = 0.0
+                        
+                    enriched["imdb_votes"] = details.get("imdbVotes", "0")
+                    enriched["plot"] = details.get("Plot", "")
+                    enriched["poster"] = details.get("Poster", "")
+                    
+                    enriched_movies.append(enriched)
 
                 if (i + 1) % 10 == 0:
                     logger.info(f"Enriched {i + 1}/{len(movies)} movies")
                     await asyncio.sleep(0.25)  # Rate limiting
 
             except Exception as e:
-                logger.error(f"Error enriching movie {movie_id}: {e}")
+                logger.error(f"Error enriching movie {movie.get('imdbID', 'unknown')}: {e}")
                 continue
 
         return enriched_movies
@@ -64,20 +110,28 @@ class ETLPipeline:
             try:
                 # Clean up the data
                 movie_doc = {
-                    "tmdb_id": movie.get("id") or movie.get("tmdb_id"),
-                    "title": movie.get("title", ""),
-                    "overview": movie.get("overview", ""),
-                    "release_date": movie.get("release_date"),
-                    "poster_path": movie.get("poster_path"),
-                    "vote_average": movie.get("vote_average", 0),
-                    "vote_count": movie.get("vote_count", 0),
-                    "popularity": movie.get("popularity", 0),
-                    "runtime": movie.get("runtime"),
-                    "revenue": movie.get("revenue"),
-                    "budget": movie.get("budget"),
+                    "imdb_id": movie.get("imdb_id"),
+                    "title": movie.get("Title", ""),
+                    "plot": movie.get("plot", ""),
+                    "year": movie.get("Year"),
+                    "runtime": movie.get("Runtime"),
+                    "imdb_rating": movie.get("imdb_rating", 0.0),
+                    "imdb_votes": movie.get("imdb_votes", "0"),
+                    "poster": movie.get("poster"),
                     "genres": movie.get("genres", []),
-                    "cast": movie.get("cast", []),
-                    "crew": movie.get("crew", []),
+                    "actors": movie.get("actors", []),
+                    "directors": movie.get("directors", []),
+                    "rated": movie.get("Rated"),
+                    "released": movie.get("Released"),
+                    "writer": movie.get("Writer"),
+                    "movie_languages": movie.get("Language"),  # Rename to avoid MongoDB reserved field
+                    "country": movie.get("Country"),
+                    "awards": movie.get("Awards"),
+                    "metascore": movie.get("Metascore"),
+                    "box_office": movie.get("BoxOffice"),
+                    "production": movie.get("Production"),
+                    "website": movie.get("Website"),
+                    "dvd": movie.get("DVD"),
                 }
 
                 await db_manager.insert_movie(movie_doc)
@@ -86,49 +140,55 @@ class ETLPipeline:
                     logger.info(f"Loaded {i + 1}/{len(movies)} movies")
 
             except Exception as e:
-                logger.error(f"Error loading movie: {e}")
+                logger.error(f"Error loading movie {movie.get('imdb_id', 'unknown')}: {e}")
                 continue
 
     async def build_knowledge_graph(self, movies: List[Dict]):
         """Build knowledge graph from movie data."""
         logger.info("Building knowledge graph...")
 
-        genres_cache = {}  # Cache for genres
+        genres_cache = {}  # Cache for genres (use name as id for OMDB)
+        actor_id_counter = 1
+        director_id_counter = 1
+        genre_id_counter = 1
 
         for i, movie in enumerate(movies):
             try:
-                movie_id = movie.get("id") or movie.get("tmdb_id")
+                imdb_id = movie.get("imdb_id")
+                movie_id = imdb_id  # Use imdb_id as movie node id
 
                 # Add movie node
                 self.graph.add_movie(
                     movie_id,
-                    movie.get("title", ""),
-                    rating=movie.get("vote_average", 0),
-                    popularity=movie.get("popularity", 0),
+                    movie.get("Title", ""),
+                    rating=movie.get("imdb_rating", 0),
                 )
 
                 # Add genres
                 for genre in movie.get("genres", []):
-                    genre_id = genre.get("id")
-                    if genre_id not in genres_cache:
-                        self.graph.add_genre(genre_id, genre.get("name", ""))
-                        genres_cache[genre_id] = True
-                    self.graph.add_genre_to_movie(genre_id, movie_id)
+                    genre_name = genre.get("name")
+                    if genre_name and genre_name not in genres_cache:
+                        self.graph.add_genre(genre_id_counter, genre_name)
+                        genres_cache[genre_name] = genre_id_counter
+                        genre_id_counter += 1
+                    if genre_name in genres_cache:
+                        self.graph.add_genre_to_movie(genres_cache[genre_name], movie_id)
 
-                # Add cast
-                for actor in movie.get("cast", [])[:10]:  # Top 10 actors
-                    actor_id = actor.get("id")
-                    if actor_id:
-                        self.graph.add_actor(actor_id, actor.get("name", ""))
-                        self.graph.add_actor_to_movie(actor_id, movie_id, actor.get("character", ""))
+                # Add cast (actors)
+                for actor in movie.get("actors", [])[:10]:  # Top 10 actors
+                    actor_name = actor.get("name")
+                    if actor_name:
+                        self.graph.add_actor(actor_id_counter, actor_name)
+                        self.graph.add_actor_to_movie(actor_id_counter, movie_id, "")
+                        actor_id_counter += 1
 
                 # Add directors
-                for crew in movie.get("crew", []):
-                    if crew.get("job") == "Director":
-                        director_id = crew.get("id")
-                        if director_id:
-                            self.graph.add_director(director_id, crew.get("name", ""))
-                            self.graph.add_director_to_movie(director_id, movie_id)
+                for director in movie.get("directors", []):
+                    director_name = director.get("name")
+                    if director_name:
+                        self.graph.add_director(director_id_counter, director_name)
+                        self.graph.add_director_to_movie(director_id_counter, movie_id)
+                        director_id_counter += 1
 
                 if (i + 1) % 20 == 0:
                     logger.info(f"Added {i + 1}/{len(movies)} movies to graph")
@@ -140,7 +200,7 @@ class ETLPipeline:
         stats = self.graph.get_graph_stats()
         logger.info(f"Knowledge graph stats: {stats}")
 
-    async def run(self, num_pages: int = 5):
+    async def run(self, num_pages_per_query: int = 1):
         """Run the complete ETL pipeline."""
         try:
             logger.info("Starting ETL pipeline...")
@@ -150,7 +210,7 @@ class ETLPipeline:
             await db_manager.create_indexes()
 
             # Fetch and process
-            movies = await self.fetch_and_process_movies(pages=num_pages)
+            movies = await self.fetch_and_process_movies(pages_per_query=num_pages_per_query)
             enriched_movies = await self.enrich_movie_data(movies)
 
             # Load to MongoDB
@@ -181,7 +241,7 @@ async def main():
     )
 
     pipeline = ETLPipeline()
-    await pipeline.run(num_pages=5)
+    await pipeline.run(num_pages_per_query=1)
 
 
 if __name__ == "__main__":

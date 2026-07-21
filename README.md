@@ -1,10 +1,10 @@
 # CineGraph - Movie Recommendation System
 
-Production-quality movie discovery and analytics web app using the TMDb API, Knowledge Graphs, and Streamlit.
+Production-quality movie discovery and analytics web app using the OMDB API, Knowledge Graphs, and Streamlit.
 
 ## Features
 
-- **ETL Pipeline**: Automated data fetching from TMDb API with enrichment and processing
+- **ETL Pipeline**: Automated data fetching from OMDB API with enrichment and processing
 - **Knowledge Graph**: Built with NetworkX using movies, actors, directors, and genres
 - **MongoDB Storage**: Persistent storage of all movie data and relationships
 - **Content-Based Recommendations**: TF-IDF similarity scoring for movie recommendations
@@ -20,7 +20,7 @@ Install these before running the project:
 
 - **Python 3.11 or 3.12** from https://www.python.org/downloads/
 - **MongoDB Community Server** from https://www.mongodb.com/try/download/community
-- **TMDb API key** from https://www.themoviedb.org/
+- **OMDB API key** from https://www.omdbapi.com/apikey.aspx
 
 ## Setup
 
@@ -50,15 +50,11 @@ pip install -r requirements.txt
 
 ### 3. Configure Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values:
-
-```bash
-cp .env.example .env
-```
+Create a `.env` file in the project root and fill in your values (you can copy from `.env.example`):
 
 Edit `.env`:
 ```env
-TMDB_API_KEY=your_tmdb_api_key_here
+OMDB_API_KEY=your_omdb_api_key_here
 MONGODB_URL=mongodb://localhost:27017
 MONGODB_DB_NAME=movies
 ```
@@ -75,22 +71,18 @@ mongod
 brew services start mongodb-community
 ```
 
-**On Linux:**
-```bash
-sudo systemctl start mongod
-```
-
 ### 5. Run ETL Pipeline
 
-Fetch and process movie data (initial run takes 10-30 minutes):
+Fetch and process movie data:
 
 ```bash
 python -m backend.etl.pipeline
 ```
 
+
 This will:
-- Fetch popular movies from TMDb API
-- Enrich with detailed information (cast, crew, genres)
+- Fetch movies from OMDB API using common search queries
+- Enrich with detailed information (cast, crew, genres, etc.)
 - Build knowledge graph relationships
 - Store everything in MongoDB
 - Train TF-IDF similarity model
@@ -116,7 +108,7 @@ Cinematic-G/
 │   │   └── mongo.py           # MongoDB operations
 │   └── etl/
 │       ├── __init__.py
-│       ├── tmdb_fetcher.py    # TMDb API client
+│       ├── omdb_fetcher.py    # OMDB API client
 │       ├── processor.py       # Data processing & TF-IDF
 │       ├── graph_builder.py   # Knowledge graph construction
 │       └── pipeline.py        # ETL orchestration
@@ -131,17 +123,15 @@ Cinematic-G/
 ### Overview Tab
 - Total movies count
 - Average ratings
-- Popularity metrics
 - Year range coverage
 
 ### Analysis Tab
 - Rating distribution histogram
-- Popularity trends by year
 - Genre distribution (bar chart and pie chart)
 
 ### Top Movies Tab
 - Customizable top N movies
-- Sort by rating, popularity, or vote count
+- Sort by IMDB rating
 
 ### Filter Tab
 - Multi-select genre filtering
@@ -151,22 +141,22 @@ Cinematic-G/
 
 ### Search Tab
 - Full-text movie title search
-- Quick results with overviews
+- Quick results with plots
 
 ## Technology Stack
 
-- **Backend**: Python, FastAPI
+- **Backend**: Python
 - **Data Processing**: Pandas, NumPy, Scikit-learn
 - **Knowledge Graph**: NetworkX
 - **Database**: MongoDB with Motor async driver
 - **Frontend**: Streamlit with Plotly visualizations
-- **API**: The Movie Database (TMDb) v3
+- **API**: Open Movie Database (OMDB) API
 
 ## API Configuration
 
-Get your free TMDb API key:
-1. Visit https://www.themoviedb.org/settings/api
-2. Sign up for an account
+Get your free OMDB API key:
+1. Visit https://www.omdbapi.com/apikey.aspx
+2. Sign up for a free account
 3. Request an API key
 4. Copy the API key to your `.env` file
 
@@ -191,14 +181,7 @@ mongo --eval "db.adminCommand('ping')"
 ```
 
 ### "requests.exceptions.ConnectionError: No connection"
-Check your internet connection and TMDb API key in `.env`
-
-## Performance Notes
-
-- First ETL run: 10-30 minutes (depending on pages fetched)
-- Subsequent runs: 5-10 minutes
-- Streamlit dashboard: Instant load after data is cached
-- MongoDB indexes ensure fast filtering and search
+Check your internet connection and OMDB API key in `.env`
 
 ## Future Enhancements
 
@@ -209,9 +192,6 @@ Check your internet connection and TMDb API key in `.env`
 - [ ] API endpoint for recommendations
 - [ ] Movie watchlist functionality
 
-## License
-
-College Project - 2024
 
 ## Support
 

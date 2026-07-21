@@ -19,25 +19,36 @@ class MovieProcessor:
 
     def process_movie_data(self, movies: List[Dict]) -> pd.DataFrame:
         """Convert raw movie data to DataFrame with processed features."""
-        df = pd.DataFrame(movies)
+        # Ensure all movies have required fields
+        safe_movies = []
+        for movie in movies:
+            safe_movie = movie.copy()
+            # Use Title (OMDB) or title
+            safe_movie["title"] = safe_movie.get("Title") or safe_movie.get("title", "")
+            safe_movie["plot"] = safe_movie.get("plot") or safe_movie.get("Plot", "")
+            safe_movies.append(safe_movie)
+        
+        df = pd.DataFrame(safe_movies)
 
         # Fill missing values
-        df["overview"] = df["overview"].fillna("")
-        df["vote_average"] = df["vote_average"].fillna(0)
-        df["popularity"] = df["popularity"].fillna(0)
-        df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce")
-
-        # Extract year from release date
-        df["year"] = df["release_date"].dt.year
-
+        if "plot" in df.columns:
+            df["plot"] = df["plot"].fillna("")
+        else:
+            df["plot"] = ""
+            
+        if "title" in df.columns:
+            df["title"] = df["title"].fillna("")
+        else:
+            df["title"] = ""
+        
         # Create genre string for TF-IDF
-        df["genre_string"] = df["genres"].apply(
-            lambda x: " ".join([g["name"] for g in x]) if isinstance(x, list) else ""
+        df["genre_string"] = df.get("genres", pd.Series([[] for _ in range(len(df))])).apply(
+            lambda x: " ".join([g.get("name", "") for g in x]) if isinstance(x, list) else ""
         )
 
         # Combine features for content similarity
         df["content"] = (
-            df["overview"] + " " + df["genre_string"] + " " + df["title"]
+            df["plot"] + " " + df["genre_string"] + " " + df["title"]
         ).fillna("")
 
         logger.info(f"Processed {len(df)} movies")
@@ -85,13 +96,13 @@ class MovieProcessor:
     ) -> pd.DataFrame:
         """Filter movies by rating range."""
         return self.movies_df[
-            (self.movies_df["vote_average"] >= min_rating)
-            & (self.movies_df["vote_average"] <= max_rating)
+            (self.movies_df["imdb_rating"] >= min_rating)
+            & (self.movies_df["imdb_rating"] <= max_rating)
         ]
 
-    def get_movies_by_year(self, year: int) -> pd.DataFrame:
+    def get_movies_by_year(self, year: str) -> pd.DataFrame:
         """Filter movies by release year."""
-        return self.movies_df[self.movies_df["year"] == year]
+        return self.movies_df[self.movies_df["year"] == str(year)]
 
     def get_movies_by_genre(self, genre_name: str) -> pd.DataFrame:
         """Filter movies by genre."""
@@ -99,7 +110,7 @@ class MovieProcessor:
             self.movies_df["genre_string"].str.contains(genre_name, case=False, na=False)
         ]
 
-    def get_top_movies(self, n: int = 10, sort_by: str = "vote_average") -> pd.DataFrame:
+    def get_top_movies(self, n: int = 10, sort_by: str = "imdb_rating") -> pd.DataFrame:
         """Get top N movies sorted by a column."""
         return self.movies_df.nlargest(n, sort_by)
 
@@ -107,7 +118,5 @@ class MovieProcessor:
         """Get overall statistics about movies."""
         return {
             "total_movies": len(self.movies_df),
-            "avg_rating": self.movies_df["vote_average"].mean(),
-            "avg_popularity": self.movies_df["popularity"].mean(),
-            "year_range": (self.movies_df["year"].min(), self.movies_df["year"].max()),
+            "avg_rating": self.movies_df["imdb_rating"].mean(),
         }
