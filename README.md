@@ -118,30 +118,6 @@ Cinematic-G/
 └── README.md
 ```
 
-## Dashboard Features
-
-### Overview Tab
-- Total movies count
-- Average ratings
-- Year range coverage
-
-### Analysis Tab
-- Rating distribution histogram
-- Genre distribution (bar chart and pie chart)
-
-### Top Movies Tab
-- Customizable top N movies
-- Sort by IMDB rating
-
-### Filter Tab
-- Multi-select genre filtering
-- Rating range slider
-- Year range slider
-- Real-time results
-
-### Search Tab
-- Full-text movie title search
-- Quick results with plots
 
 ## Technology Stack
 
@@ -160,43 +136,3 @@ Get your free OMDB API key:
 3. Request an API key
 4. Copy the API key to your `.env` file
 
-## Common Issues
-
-### "ModuleNotFoundError: No module named 'backend'"
-Make sure you're running commands from the project root directory:
-```bash
-# Correct
-python -m backend.etl.pipeline
-
-# Wrong
-cd backend
-python -m etl.pipeline
-```
-
-### "MongoDB connection error"
-Ensure MongoDB is running:
-```bash
-# Check if running
-mongo --eval "db.adminCommand('ping')"
-```
-
-### "requests.exceptions.ConnectionError: No connection"
-Check your internet connection and OMDB API key in `.env`
-
-## Future Enhancements
-
-- [ ] Collaborative filtering recommendations
-- [ ] User preference profiles
-- [ ] Advanced graph traversal algorithms
-- [ ] Real-time data updates
-- [ ] API endpoint for recommendations
-- [ ] Movie watchlist functionality
-
-
-## Support
-
-For issues or questions:
-1. Check the README troubleshooting section
-2. Verify MongoDB is running
-3. Confirm `.env` variables are set correctly
-4. Check internet connection for API calls
